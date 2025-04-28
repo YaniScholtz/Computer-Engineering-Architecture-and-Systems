@@ -43,7 +43,7 @@ Implement a system where the PC can read and write full bytes, high nibbles, and
 **Install the required Python package:**
 ```bash
 pip install pyserial
-
+```
 ## Acknowledgements
 This project was developed as part of the **Computer Engineering: Architecture and Systems** course practicals at the University or Pretoria.
 
