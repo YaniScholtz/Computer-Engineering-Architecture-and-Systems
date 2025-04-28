@@ -1,0 +1,22 @@
+
+State Machine - |FInal_prac1|r_State
+Name r_State.IDLE r_State.TRANSMIT r_State.RECEIVE 
+r_State.IDLE 0 0 0 
+r_State.RECEIVE 1 0 1 
+r_State.TRANSMIT 1 1 0 
+
+State Machine - |FInal_prac1|UART_Transmitter:UART_TX_INST|StateMachine
+Name StateMachine.Tx_StopBit StateMachine.Tx_Data StateMachine.Tx_StartBit StateMachine.IDLE StateMachine.Reset 
+StateMachine.IDLE 0 0 0 0 0 
+StateMachine.Tx_StartBit 0 0 1 1 0 
+StateMachine.Tx_Data 0 1 0 1 0 
+StateMachine.Tx_StopBit 1 0 0 1 0 
+StateMachine.Reset 0 0 0 1 1 
+
+State Machine - |FInal_prac1|UART_Receiver:UART_RX_INST|StateMachine
+Name StateMachine.StopBit StateMachine.DataBits StateMachine.StartBit StateMachine.IDLE StateMachine.Reset 
+StateMachine.IDLE 0 0 0 0 0 
+StateMachine.StartBit 0 0 1 1 0 
+StateMachine.DataBits 0 1 0 1 0 
+StateMachine.StopBit 1 0 0 1 0 
+StateMachine.Reset 0 0 0 1 1 

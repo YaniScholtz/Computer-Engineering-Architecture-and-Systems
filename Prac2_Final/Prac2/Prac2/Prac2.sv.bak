@@ -1,0 +1,156 @@
+// Top-level module
+module FInal_prac1 
+  #(parameter CLKS_PER_BIT = 87)
+  (
+   input        Clock,
+   input        Rx_Receive,
+   input        sw1, 
+   input        sw0,
+   output       Tx_Transmit
+   );
+    
+    // RAM declaration (256 bytes)
+    reg [7:0] ram [0:255];
+    
+    // UART signals
+    wire        RX_CompleteByte;
+    wire [7:0]  Rx_HoldByte;
+    reg         Tx_ReadyforTransmission = 0;
+    reg [7:0]   Tx_HoldByte = 0;
+    wire        Tx_Active;
+    wire        Tx_Done;
+    
+    // Command parsing
+    reg [7:0] command_buffer [0:4];  // Buffer for command + address + data
+    reg [2:0] buffer_index = 0;
+    
+    // State machine
+    typedef enum logic [2:0] {
+        IDLE = 3'b000,
+        RECEIVE_CMD = 3'b001,
+        PROCESS_CMD = 3'b010,
+        TRANSMIT_RESP = 3'b011,
+        DELAY = 3'b100
+    } state_t;
+    state_t state = IDLE;
+    
+    // Command types
+    localparam [7:0]
+        READ_FW  = 8'h01,
+        READ_LSN = 8'h02,
+        READ_MSN = 8'h03,
+        WRITE_FW = 8'h04,
+        WRITE_LSN = 8'h05,
+        WRITE_MSN = 8'h06;
+        
+    reg [15:0] delay_counter = 0;
+    
+    // UART Instances
+    UART_Receiver #(.CLKS_PER_BIT(CLKS_PER_BIT)) UART_RX_INST (
+        .Clock(Clock),
+        .Rx_Receive(Rx_Receive),
+        .Rx_byteReceived(RX_CompleteByte),
+        .Rx_holdingByte(Rx_HoldByte)
+    );
+
+    UART_Transmitter #(.CLKS_PER_BIT(CLKS_PER_BIT)) UART_TX_INST (
+        .Clock(Clock),
+        .Tx_newTransmissionData(Tx_ReadyforTransmission),
+        .Tx_TransmissionByte(Tx_HoldByte),
+        .Tx_active(Tx_Active),
+        .Tx_Transmit(Tx_Transmit),
+        .Tx_done(Tx_Done)
+    );
+    
+    // RAM initialization
+    initial begin
+        integer i;
+        for (i = 0; i < 256; i = i + 1)
+            ram[i] = 8'h00;
+    end
+    
+    always_ff @(posedge Clock) begin
+        case (state)
+            IDLE: begin
+                buffer_index <= 0;
+                Tx_ReadyforTransmission <= 0;
+                delay_counter <= 0;
+                if (RX_CompleteByte) begin
+                    command_buffer[0] <= Rx_HoldByte;
+                    buffer_index <= 1;
+                    state <= RECEIVE_CMD;
+                end
+            end
+            
+            RECEIVE_CMD: begin
+                if (RX_CompleteByte) begin
+                    command_buffer[buffer_index] <= Rx_HoldByte;
+                    buffer_index <= buffer_index + 1;
+                    
+                    // Determine how many bytes to receive based on command
+                    case (command_buffer[0])
+                        READ_FW, READ_LSN, READ_MSN: begin
+                            if (buffer_index == 1) state <= PROCESS_CMD;
+                        end
+                        WRITE_FW, WRITE_LSN, WRITE_MSN: begin
+                            if (buffer_index == 2) state <= PROCESS_CMD;
+                        end
+                    endcase
+                end
+            end
+            
+            PROCESS_CMD: begin
+                case (command_buffer[0])
+                    READ_FW: begin
+                        Tx_HoldByte <= ram[command_buffer[1]];
+                        state <= TRANSMIT_RESP;
+                    end
+                    READ_LSN: begin
+                        Tx_HoldByte <= ram[command_buffer[1]] & 8'h0F;
+                        state <= TRANSMIT_RESP;
+                    end
+                    READ_MSN: begin
+                        Tx_HoldByte <= (ram[command_buffer[1]] >> 4) & 8'h0F;
+                        state <= TRANSMIT_RESP;
+                    end
+                    WRITE_FW: begin
+                        ram[command_buffer[1]] <= command_buffer[2];
+                        state <= DELAY;
+                    end
+                    WRITE_LSN: begin
+                        ram[command_buffer[1]] <= (ram[command_buffer[1]] & 8'hF0) | 
+                                                 (command_buffer[2] & 8'h0F);
+                        state <= DELAY;
+                    end
+                    WRITE_MSN: begin
+                        ram[command_buffer[1]] <= (ram[command_buffer[1]] & 8'h0F) | 
+                                                 ((command_buffer[2] << 4) & 8'hF0);
+                        state <= DELAY;
+                    end
+                endcase
+            end
+            
+            TRANSMIT_RESP: begin
+                if (!Tx_Active && !Tx_ReadyforTransmission) begin
+                    Tx_ReadyforTransmission <= 1;
+                end
+                else if (Tx_Done) begin
+                    Tx_ReadyforTransmission <= 0;
+                    state <= DELAY;
+                end
+            end
+            
+            DELAY: begin
+                if (delay_counter < CLKS_PER_BIT * 2) begin
+                    delay_counter <= delay_counter + 1;
+                end
+                else begin
+                    state <= IDLE;
+                end
+            end
+        endcase
+    end
+    
+endmodule
+
+// Your existing UART_Receiver and UART_Transmitter modules remain unchanged

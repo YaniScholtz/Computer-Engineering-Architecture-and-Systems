@@ -1,0 +1,339 @@
+module Entire_pracv2 //Top level module for the project. This integrates the receiver and transmitter parts of the UART.
+  #(parameter CLKS_PER_BIT = 87)  // Number of clock cycles per bit. 10Mhz/115200 = 87. 
+  (
+   input        i_Clock,
+   input        i_Rx_Serial, // data received form the pc via UART
+   input        i_Switch_1, 
+   input        i_Switch_0,
+   output       o_Tx_Serial // data transmitted to the pc via UART
+   );
+
+  // Receiver signals
+  wire        w_Rx_DV; // This wire indicates that a complete byte has been received for storing
+  wire [7:0]  w_Rx_Byte; // Holds the received byte
+
+  // Transmitter signals
+  reg         r_Tx_DV = 0; // Indicates data is ready for transmission 
+  reg [7:0]   r_Tx_Byte = 0; // Holds the byte to be transmitted
+  wire        w_Tx_Active;
+  wire        w_Tx_Done;
+
+  
+  reg [7:0]   r_Buffer [0:49];  //Stores the 50 received bytes
+  reg [5:0]   r_Buffer_Index = 0; // Keeps track of the received byte index
+  reg [5:0]   r_Tx_Index = 0; // Tracks which index is being transmitted 
+  
+  typedef enum logic [1:0] {IDLE = 2'b00, RECEIVE = 2'b01, TRANSMIT = 2'b10} state_t; //State machine states
+  state_t r_State = IDLE; //starting in the IDLE state
+
+  
+  reg [15:0] r_Delay_Counter = 0; //Adds delay between transmission to make the transmission for reliable and no timing issues
+  reg r_Wait_For_Tx = 0; // ensures transmission is completed before sending the next byte
+
+  // Instantiate UART Receiver
+  UART_Receiver #(.CLKS_PER_BIT(CLKS_PER_BIT)) UART_RX_INST (
+    .i_Clock(i_Clock),
+    .i_Rx_Serial(i_Rx_Serial),
+    .o_Rx_DV(w_Rx_DV),
+    .o_Rx_Byte(w_Rx_Byte)
+  );
+
+  // Instantiate UART Transmitter
+  UART_Transmitter #(.CLKS_PER_BIT(CLKS_PER_BIT)) UART_TX_INST (
+    .i_Clock(i_Clock),
+    .i_Tx_DV(r_Tx_DV),
+    .i_Tx_Byte(r_Tx_Byte),
+    .o_Tx_Active(w_Tx_Active),
+    .o_Tx_Serial(o_Tx_Serial),
+    .o_Tx_Done(w_Tx_Done)
+  );
+
+  
+  always_ff @(posedge i_Clock) begin
+    case (r_State)
+
+      IDLE: begin
+        r_Buffer_Index <= 0; //resetting buffer
+        r_Tx_Index <= 0;
+        r_Tx_DV <= 0;
+        r_Wait_For_Tx <= 0;
+        r_Delay_Counter <= 0;
+
+        if (w_Rx_DV) begin //if byte has been received
+          r_Buffer[0] <= w_Rx_Byte;  // Store the first byte in the buffer
+          r_Buffer_Index <= 1; //increasing the index to the next position in the buffer
+          r_State <= RECEIVE; // go to the next state machine 
+        end
+      end
+
+      RECEIVE: begin
+        r_Tx_DV <= 0; //This is to ensure that transmitting does not happen during the storing of bytes
+        
+        if (w_Rx_DV) begin // if byte is received then 
+          if (r_Buffer_Index < 50) begin  // Prevent buffer overflow
+            r_Buffer[r_Buffer_Index] <= w_Rx_Byte;
+            r_Buffer_Index <= r_Buffer_Index + 1;
+          end
+        end
+
+        if (r_Buffer_Index >= 50) begin
+          r_Tx_Index <= 0; // Initisalising this as a 0 so that the tranmission happens from the beginning
+          r_Delay_Counter <= 0;
+          r_State <= TRANSMIT; // Go to state transmit 
+        end
+      end
+
+
+      TRANSMIT: begin
+        if (r_Tx_Index < 50) begin  // Only process if there are bytes left to send
+          if (r_Wait_For_Tx) begin
+            // Wait for transmission to complete
+            if (w_Tx_Done) begin //goes high when the current byte is being transmitted
+              r_Wait_For_Tx <= 0; //means the transmission if complete 
+              r_Tx_DV <= 0; // set to 0 so that the UART does not send the same byte
+              r_Tx_Index <= r_Tx_Index + 1; // keeps track of which byte is being sent 
+              
+             
+              r_Delay_Counter <= CLKS_PER_BIT * 2; // Adding a delay for proper data processing. Waiting for two full bits before sending the next byte
+            end
+          end
+          else if (r_Delay_Counter > 0) begin
+            r_Delay_Counter <= r_Delay_Counter - 1; // Here the delay is happening
+          end
+          else if (!w_Tx_Active && !r_Tx_DV) begin //if transmission is idle and there is not byte to be transmitted, then transmission is done
+    
+            case ({i_Switch_1, i_Switch_0}) //operation for bit shifting
+              2'b00: r_Tx_Byte <= {r_Buffer[r_Tx_Index][6:0], r_Buffer[r_Tx_Index][7]};  //Shift 1 left
+              2'b01: r_Tx_Byte <= {r_Buffer[r_Tx_Index][5:0], r_Buffer[r_Tx_Index][7:6]}; //Shift 2 left 
+         
+			  2'b10: begin //shift 1 right
+    r_Tx_Byte[7] <= r_Buffer[r_Tx_Index][0]; 
+    r_Tx_Byte[6] <= r_Buffer[r_Tx_Index][7];
+    r_Tx_Byte[5] <= r_Buffer[r_Tx_Index][6];
+    r_Tx_Byte[4] <= r_Buffer[r_Tx_Index][5];
+    r_Tx_Byte[3] <= r_Buffer[r_Tx_Index][4];
+    r_Tx_Byte[2] <= r_Buffer[r_Tx_Index][3];
+    r_Tx_Byte[1] <= r_Buffer[r_Tx_Index][2];
+    r_Tx_Byte[0] <= r_Buffer[r_Tx_Index][1];
+end
+              2'b11: r_Tx_Byte <= {r_Buffer[r_Tx_Index][1:0], r_Buffer[r_Tx_Index][7:2]}; // Right shift by 2
+              default: r_Tx_Byte <= r_Buffer[r_Tx_Index];
+            endcase
+            
+            r_Tx_DV <= 1; //starts sending the bytes
+            r_Wait_For_Tx <= 1;
+          end
+        end
+        else begin
+          r_State <= IDLE;
+        end
+      end
+    endcase
+  end
+endmodule
+
+
+// UART Receiver Module
+module UART_Receiver
+  #(parameter CLKS_PER_BIT = 87)
+  (
+   input        i_Clock,
+   input        i_Rx_Serial,
+   output       o_Rx_DV,
+   output [7:0] o_Rx_Byte
+   );
+
+	
+	//STate machine of UART receiver
+  parameter s_IDLE         = 3'b000; //Waits for start bit
+  parameter s_RX_START_BIT = 3'b001; // Confirms start bit and making sure it is stable
+  parameter s_RX_DATA_BITS = 3'b010; // Reads 8 data bits one by one
+  parameter s_RX_STOP_BIT  = 3'b011; // Checks if stop bit is high
+  parameter s_CLEANUP      = 3'b100; // prepares for next character 
+   
+  reg [2:0]     r_SM_Main = s_IDLE; //Current state
+  reg [7:0]     r_Clock_Count = 0; //counts the clock cycles per bit
+  reg [2:0]     r_Bit_Index = 0; // tracks the received data bit
+  reg [7:0]     r_Rx_Byte = 0; // stores the received byte
+  reg           r_Rx_DV = 0; // flag to show that the byte is fully received
+  reg           r_Rx_Data_R = 1'b1; // synchronising input
+  reg           r_Rx_Data = 1'b1;
+   
+  always @(posedge i_Clock) begin
+    r_Rx_Data_R <= i_Rx_Serial;
+    r_Rx_Data   <= r_Rx_Data_R;
+  end
+
+  always @(posedge i_Clock) begin
+    case (r_SM_Main)
+      s_IDLE:
+        begin
+          r_Rx_DV       <= 1'b0; //clearing the data valid input
+          r_Clock_Count <= 0;
+          r_Bit_Index   <= 0;
+          if (r_Rx_Data == 1'b0) //when a start bit is detected then go to the next state 
+            r_SM_Main <= s_RX_START_BIT;
+        end
+         
+      s_RX_START_BIT:
+        begin
+          if (r_Clock_Count == (CLKS_PER_BIT-1)/2) // this is to sample the start bit at its midpoint to ensure accurate UART reception 
+			 begin
+            if (r_Rx_Data == 1'b0) begin // checking that after half a bit time that the start bit is still low which shows a valid start bit
+              r_Clock_Count <= 0; //reset the clock 
+              r_SM_Main     <= s_RX_DATA_BITS;// move to the byte receiving 
+            end
+            else
+              r_SM_Main <= s_IDLE; //if the r_Rx_Data is not low at the midpoint then it is not a valid start bit and go back to idle 
+          end
+          else begin
+            r_Clock_Count <= r_Clock_Count + 1; // increment clock until start bit is reached 
+          end
+        end
+         
+      s_RX_DATA_BITS:
+        begin
+          if (r_Clock_Count < CLKS_PER_BIT-1) begin
+            r_Clock_Count <= r_Clock_Count + 1; // increase until clk bits are reached so that receiving can happen
+          end
+          else begin
+            r_Clock_Count          <= 0; //reset it back 
+            r_Rx_Byte[r_Bit_Index] <= r_Rx_Data; //store the received bit 
+            if (r_Bit_Index < 7) begin
+              r_Bit_Index <= r_Bit_Index + 1; //increase the index bit 
+            end
+            else begin
+              r_Bit_Index <= 0; 
+              r_SM_Main   <= s_RX_STOP_BIT;
+            end
+          end
+        end
+     
+      s_RX_STOP_BIT:
+        begin
+          if (r_Clock_Count < CLKS_PER_BIT-1) begin
+            r_Clock_Count <= r_Clock_Count + 1;
+          end
+          else begin
+            r_Rx_DV <= 1'b1; //set that the data byte has been received in full and can go to the stop bit 
+            r_SM_Main <= s_CLEANUP;
+          end
+        end
+     
+      s_CLEANUP:
+        begin
+          r_SM_Main <= s_IDLE;
+          r_Rx_DV   <= 1'b0; //sets the flag that says a full data byte has been received to 0 
+        end
+         
+    endcase
+  end
+
+  assign o_Rx_DV   = r_Rx_DV; //reflects the r_Rx_DV values 
+  assign o_Rx_Byte = r_Rx_Byte;
+   
+endmodule
+
+
+// UART Transmitter Module
+module UART_Transmitter
+  #(parameter CLKS_PER_BIT = 87)
+  (
+   input        i_Clock,
+   input        i_Tx_DV,
+   input [7:0]  i_Tx_Byte,
+   output       o_Tx_Active,
+   output       o_Tx_Serial,
+   output       o_Tx_Done
+   );
+
+	//State machine 
+  parameter s_IDLE        = 3'b000;
+  parameter s_TX_START    = 3'b001;
+  parameter s_TX_DATA     = 3'b010;
+  parameter s_TX_STOP     = 3'b011;
+  parameter s_CLEANUP     = 3'b100;
+
+  reg [2:0]     r_SM_Main = s_IDLE;// starting state
+  reg [7:0]     r_Clock_Count = 0;
+  reg [2:0]     r_Bit_Index = 0; //tracks which bit is being sent
+  reg [7:0]     r_Tx_Data = 0; // stores the byte being transmitted 
+  reg           r_Tx_Done = 0; // indicates when the entire byte has been transmitted
+  reg           r_Tx_Active = 0; // indicates an ongoing transmission 
+  reg           r_Tx_Serial = 1; // controls the tx line 
+
+  always @(posedge i_Clock) begin
+    case (r_SM_Main)
+      s_IDLE:
+        begin
+          r_Tx_Serial <= 1; //when the uart transmission is high, then the start bit is not being sent yet
+          r_Tx_Done   <= 0; // no data has been transmitted yet
+          r_Clock_Count <= 0;
+          if (i_Tx_DV) begin // check if new data is available for transmission
+            r_Tx_Active <= 1; //transmission is in progress
+            r_Tx_Data   <= i_Tx_Byte; // store the data
+            r_SM_Main   <= s_TX_START; // go to next state
+          end
+        end
+
+      s_TX_START:
+        begin
+          r_Tx_Serial <= 0; //this sends the start bit 
+          if (r_Clock_Count < CLKS_PER_BIT-1) begin
+            r_Clock_Count <= r_Clock_Count + 1;
+          end
+          else begin
+            r_Clock_Count <= 0;
+            r_SM_Main     <= s_TX_DATA;
+          end
+        end
+
+      s_TX_DATA:
+        begin
+          r_Tx_Serial <= r_Tx_Data[r_Bit_Index]; //assigns current data bit to the tx output
+          if (r_Clock_Count < CLKS_PER_BIT-1) begin
+            r_Clock_Count <= r_Clock_Count + 1;
+          end
+          else begin
+            r_Clock_Count <= 0;
+            if (r_Bit_Index < 7) begin
+              r_Bit_Index <= r_Bit_Index + 1;
+            end
+            else begin
+              r_Bit_Index <= 0;
+              r_SM_Main   <= s_TX_STOP;
+            end
+          end
+        end
+
+      s_TX_STOP:
+        begin
+          r_Tx_Serial <= 1; // sends the stop bit
+          if (r_Clock_Count < CLKS_PER_BIT-1) begin
+            r_Clock_Count <= r_Clock_Count + 1;
+          end
+          else begin
+            r_Tx_Done   <= 1; // shows byte transmission is complete 
+            r_Clock_Count <= 0;
+            r_SM_Main   <= s_CLEANUP;
+          end
+        end
+
+      s_CLEANUP:
+        begin
+          r_Tx_Active <= 0;
+          r_Tx_Done   <= 0;
+          r_SM_Main   <= s_IDLE;
+        end
+
+      default:
+        r_SM_Main <= s_IDLE;
+
+    endcase
+  end
+
+  assign o_Tx_Active = r_Tx_Active;
+  assign o_Tx_Serial = r_Tx_Serial;
+  assign o_Tx_Done   = r_Tx_Done;
+  
+endmodule

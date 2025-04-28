@@ -1,0 +1,18 @@
+Fitter Status : Successful - Wed Apr 16 20:51:25 2025
+Quartus Prime Version : 20.1.1 Build 720 11/11/2020 SJ Lite Edition
+Revision Name : Prac2
+Top-level Entity Name : Prac2
+Family : MAX 10
+Device : 10M50DAF484C7G
+Timing Models : Final
+Total logic elements : 3,381 / 49,760 ( 7 % )
+    Total combinational functions : 1,769 / 49,760 ( 4 % )
+    Dedicated logic registers : 2,166 / 49,760 ( 4 % )
+Total registers : 2166
+Total pins : 3 / 360 ( < 1 % )
+Total virtual pins : 0
+Total memory bits : 0 / 1,677,312 ( 0 % )
+Embedded Multiplier 9-bit elements : 0 / 288 ( 0 % )
+Total PLLs : 0 / 4 ( 0 % )
+UFM blocks : 0 / 1 ( 0 % )
+ADC blocks : 0 / 2 ( 0 % )

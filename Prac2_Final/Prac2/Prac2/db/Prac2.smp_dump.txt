@@ -1,0 +1,25 @@
+
+State Machine - |Prac2|uart_ram_bridge:bridge|state
+Name state.SEND_BYTE state.READ_RAM state.WRITE_RAM state.GET_DATA state.GET_ADDR state.000 
+state.000 0 0 0 0 0 0 
+state.GET_ADDR 0 0 0 0 1 1 
+state.GET_DATA 0 0 0 1 0 1 
+state.WRITE_RAM 0 0 1 0 0 1 
+state.READ_RAM 0 1 0 0 0 1 
+state.SEND_BYTE 1 0 0 0 0 1 
+
+State Machine - |Prac2|uart_ram_bridge:bridge|UART_Transmitter:uart_tx|StateMachine
+Name StateMachine.Tx_StopBit StateMachine.Tx_Data StateMachine.Tx_StartBit StateMachine.IDLE StateMachine.Reset 
+StateMachine.IDLE 0 0 0 0 0 
+StateMachine.Tx_StartBit 0 0 1 1 0 
+StateMachine.Tx_Data 0 1 0 1 0 
+StateMachine.Tx_StopBit 1 0 0 1 0 
+StateMachine.Reset 0 0 0 1 1 
+
+State Machine - |Prac2|uart_ram_bridge:bridge|UART_Receiver:uart_rx|StateMachine
+Name StateMachine.StopBit StateMachine.DataBits StateMachine.StartBit StateMachine.IDLE StateMachine.Reset 
+StateMachine.IDLE 0 0 0 0 0 
+StateMachine.StartBit 0 0 1 1 0 
+StateMachine.DataBits 0 1 0 1 0 
+StateMachine.StopBit 1 0 0 1 0 
+StateMachine.Reset 0 0 0 1 1 
