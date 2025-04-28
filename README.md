@@ -1,6 +1,5 @@
 # Computer-Engineering-Architecture-and-Systems
-This repository contains two practical projects completed for the Computer Engineering: Architecture and Systems course.
-Both projects involve UART communication between a PC and an FPGA board.
+This repository contains two practical projects completed for the Computer Engineering: Architecture and Systems course. Both projects involve UART communication between a PC and an FPGA board.
 
 Practical Projects
 Final_prac1: FPGA Byte Shifter
@@ -54,36 +53,28 @@ Python 3.x
 
 Python pyserial package
 
-To install pyserial, run:
+Install the required Python package:
 
-bash
-Copy
-Edit
 pip install pyserial
+
 How to Run
-Program the FPGA:
+1. Program the FPGA:
 
 Load FInal_prac1.sv for Prac 1 or Prac2.sv for Prac 2 onto the FPGA.
 
-Connect the FPGA to the PC:
+2. Connect the FPGA to the PC:
 
 Ensure the correct COM port is set inside the Python scripts (e.g., COM8).
 
-Run the Python script:
+3. Run the Python script:
 
 For Prac 1:
-
-bash
-Copy
-Edit
 python Version2.py
-For Prac 2:
 
-bash
-Copy
-Edit
+For Prac 2:
 python prac2.py
-Follow the output:
+
+4. Follow the output:
 
 For Prac 1: View the success rate and shifting verification.
 
@@ -91,7 +82,6 @@ For Prac 2: Enter commands to read and write to FPGA RAM.
 
 Acknowledgements
 Developed for the Computer Engineering: Architecture and Systems course practicals.
-
 
 
 
